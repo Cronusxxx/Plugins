@@ -1,0 +1,101 @@
+                            EntityCrateConfig crateConfig = _ins._config.EntityCrates.FirstOrDefault(x => x.Prefab == prefab.prefab);
+                            if (crateConfig != null && crateConfig.IsOwnLootTable) _ins.NextTick(() => _ins.AddToContainerItem((entity as BoxStorage).inventory, crateConfig.LootTable));
+                        }
+                        else entity.SetFlag(BaseEntity.Flags.Locked, true);
+                    }
+ 
+                    if (entity is BaseOven)
+                    {
+                        entity.SetFlag(BaseEntity.Flags.Locked, true);
+                        if (entity.ShortPrefabName == "lantern.deployed") entity.SetFlag(BaseEntity.Flags.On, true);
+                    }
+ 
+                    if (entity is CCTV_RC)
+                    {
+                        _countCctv++;
+                        CCTV_RC cctv = entity as CCTV_RC;
+                        cctv.UpdateFromInput(5, 0);
+                        cctv.rcIdentifier = $"Submarine{_countCctv}";
+                    }
+ 
+                    if (entity is PlanterBox || entity is StashContainer || entity is GunTrap || entity is DropBox) entity.SetFlag(BaseEntity.Flags.Locked, true);
+ 
+                    if (entity is SkullTrophy)
+                    {
+                        entity.SetFlag(BaseEntity.Flags.Locked, true);
+                        Item item = ItemManager.CreateByName("skull.human", 1);
+                        int number = UnityEngine.Random.Range(1, 101);
+                        if (number < 50) item.name = "SKULL OF \u0022KpucTaJl\u0022";
+                        else if (number > 80) item.name = "SKULL OF \u0022Gruber\u0022";
+                        else item.name = "SKULL OF \u0022Jtedal\u0022";
+                        item.MoveToContainer((entity as SkullTrophy).inventory);
+                    }
+ 
+                    if (entity is PoweredWaterPurifier) (entity as PoweredWaterPurifier).inventory.capacity = 0;
+                    if (entity is FuelGenerator) (entity as FuelGenerator).inventory.capacity = 0;
+ 
+                    if (entity is ElectricalHeater) (entity as ElectricalHeater).UpdateFromInput(3, 0);
+                    if (entity is AudioAlarm) (entity as AudioAlarm).UpdateFromInput(1, 0);
+                    if (entity is SirenLight) (entity as SirenLight).UpdateFromInput(1, 0);
+ 
+                    if (entity is CardReader) (entity as CardReader).UpdateFromInput(1, 0);
+ 
+                    if (entity is PressButton)
+                    {
+                        if (Vector3.Distance(prefab.pos.ToVector3(), new Vector3(1.466f, 2.859f, 17.164f)) < 1f) ButtonBlue = entity as PressButton;
+                        else ButtonRed = entity as PressButton;
+                    }
+ 
+                    if (entity is ComputerStation)
+                    {
+                        ComputerStation computer = entity as ComputerStation;
+                        for (int i = 1; i <= 4; i++) computer.ForceAddBookmark($"Submarine{i}");
+                    }
+ 
+                    if (entity is AutoTurret)
+                    {
+                        AutoTurret turret = entity as AutoTurret;
+                        turret.inventory.Insert(ItemManager.CreateByName(_ins._config.Turret.ShortNameWeapon));
+                        turret.inventory.Insert(ItemManager.CreateByName(_ins._config.Turret.ShortNameAmmo, _ins._config.Turret.CountAmmo));
+                        turret.SendNetworkUpdate();
+                        turret.UpdateFromInput(10, 0);
+                        turret.InitializeHealth(_ins._config.Turret.Hp, _ins._config.Turret.Hp);
+                        Turrets.Add(turret);
+                    }
+ 
+                    Entities.Add(entity);
+ 
+                    yield return CoroutineEx.waitForSeconds(_ins._config.Delay);
+                }
+                SpawnCrates();
+                SpawnHackCrates();
+                foreach (PresetConfig preset in _ins._config.OutsideNpc) SpawnPreset(preset);
+                if (_ins._config.PveMode.Pve && _ins.plugins.Exists("PveMode"))
+                {
+                    JObject config = new JObject
+                    {
+                        ["Damage"] = _ins._config.PveMode.Damage,
+                        ["ScaleDamage"] = new JArray { _ins._config.PveMode.ScaleDamage.Select(x => new JObject { ["Type"] = x.Type, ["Scale"] = x.Scale }) },
+                        ["LootCrate"] = _ins._config.PveMode.LootCrate,
+                        ["HackCrate"] = _ins._config.PveMode.HackCrate,
+                        ["LootNpc"] = _ins._config.PveMode.LootNpc,
+                        ["DamageNpc"] = _ins._config.PveMode.DamageNpc,
+                        ["DamageTank"] = false,
+                        ["TargetNpc"] = _ins._config.PveMode.TargetNpc,
+                        ["TargetTank"] = false,
+                        ["CanEnter"] = _ins._config.PveMode.CanEnter,
+                        ["CanEnterCooldownPlayer"] = _ins._config.PveMode.CanEnterCooldownPlayer,
+                        ["TimeExitOwner"] = _ins._config.PveMode.TimeExitOwner,
+                        ["AlertTime"] = _ins._config.PveMode.AlertTime,
+                        ["RestoreUponDeath"] = _ins._config.PveMode.RestoreUponDeath,
+                        ["CooldownOwner"] = _ins._config.PveMode.CooldownOwner,
+                        ["Darkening"] = _ins._config.PveMode.Darkening
+                    };
+                    HashSet<uint> crates = Crates.Select(x => x.net.ID);
+                    foreach (HackableLockedCrate crate in HackCrates) crates.Add(crate.net.ID);
+                    _ins.PveMode.Call("EventAddPveMode", _ins.Name, config, transform.position, _ins.Radius, crates, Scientists.Select(x => x.net.ID), new HashSet<uint>(), new HashSet<uint>(), new HashSet<ulong>(), null);
+                }
+                InvokeRepeating(ChangeToFinishTime, 1f, 1f);
+                Interface.Oxide.CallHook("OnWaterEventStart", Entities, transform.position, _ins.Radius);
+            }
+ 
